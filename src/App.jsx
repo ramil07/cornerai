@@ -439,8 +439,20 @@ export default function CornerAIApp() {
       const url = URL.createObjectURL(videoFile);
       
       video.onloadedmetadata = () => {
-        canvas.width = 640;
-        canvas.height = 480;
+        // Match video aspect ratio, max 1280px on longest side
+        const maxSize = 1280;
+        const ratio = video.videoWidth / video.videoHeight;
+        
+        if (ratio > 1) {
+          // Landscape video (gym camera)
+          canvas.width = maxSize;
+          canvas.height = Math.round(maxSize / ratio);
+        } else {
+          // Portrait video (phone)
+          canvas.height = maxSize;
+          canvas.width = Math.round(maxSize * ratio);
+        }
+        
         const duration = video.duration;
         const interval = duration / (maxFrames - 1);
         let frameCount = 0;
@@ -481,8 +493,279 @@ export default function CornerAIApp() {
     
     if (useVideoModel && pendingVideo) {
       try {
-        const frames = await extractVideoFrames(pendingVideo, 6);
+        const frames = await extractVideoFrames(pendingVideo, 8);
         
+        // Find the last user message (should be the video one)
+        const lastMsgIndex = finalHistory.length - 1;
+        if (finalHistory[lastMsgIndex].role === "user") {
+          const lastMsg = finalHistory[lastMsgIndex];
+          const textContent = typeof lastMsg.content === "string" 
+            ? lastMsg.content 
+            : lastMsg.content.find(c => c.type === "text")?.text || "Analyze this video";
+          
+          // Rebuild with image frames
+          finalHistory[lastMsgIndex] = {
+            role: "user",
+            content: [
+              { type: "text", text: textContent },
+              ...frames.map((frame, i) => ({
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/jpeg",
+                  data: frame.split(",")[1] // strip data:image/jpeg;base64, prefix
+                }
+              }))
+            ]
+          };
+        }
+      } catch (err) {
+        console.error("Frame extraction failed:", err);
+        // Fall back to text-only
+      }
+    }
+
+    const response = await fetch("/.netlify/functions/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: useVideoModel ? MODEL_VIDEO : MODEL_CHAT,
+        max_tokens: 1500,
+        system: SYSTEM_PROMPT,
+        messages: finalHistory,
+      }),
+    });
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    return data.content?.[0]?.text || "";
+  }
+
+  async function sendMessage(text) {
+    const userText = (text || input).trim();
+    if ((!userText && !pendingVideo) || loading) return;
+
+    if (usage.messages >= limits.daily) {
+      setPaywall("messages");
+      return;
+    }
+    if (pendingVideo && usage.videos >= limits.videosMonthly) {
+      setPaywall("video");
+      return;
+    }
+
+    setInput("");
+    setError("");
+
+    let finalText = userText;
+    const hasVideo = !!pendingVideo;
+    if (pendingVideo) {
+      finalText = userText
+        ? `${userText}\n\n[Video attached: ${pendingVideo.name}]`
+        : `[Video attached: ${pendingVideo.name}] — Analyze this for me.`;
+      setUsage(u => ({ ...u, videos: u.videos + 1 }));
+    }
+    setUsage(u => ({ ...u, messages: u.messages + 1 }));
+
+    const msgId = Date.now();
+    setMessages(prev => [...prev, {
+      role: "user", id: msgId,
+      text: userText || "Analyze this video",
+      video: pendingVideo?.name || null,
+    }]);
+    historyRef.current = [...historyRef.current, { role: "user", content: finalText }];
+    setPendingVideo(null);
+    setLoading(true);
+
+    try {
+      const raw = await callCoach(historyRef.current, hasVideo);
+      historyRef.current = [...historyRef.current, { role: "assistant", content: raw }];
+      setMessages(prev => [...prev, { role: "coach", id: Date.now(), parsed: parseCoachMessage(raw) }]);
+    } catch {
+      setError("Couldn't reach Coach. Try again.");
+    }
+    setLoading(false);
+  }
+
+  async function continueAfterQuiz(answerText) {
+    if (usage.messages >= limits.daily) {
+      setPaywall("messages");
+      return;
+    }
+    setUsage(u => ({ ...u, messages: u.messages + 1 }));
+    historyRef.current = [...historyRef.current, { role: "user", content: answerText }];
+    setLoading(true);
+    try {
+      const raw = await callCoach(historyRef.current);
+      if (!raw) { setLoading(false); return; }
+      historyRef.current = [...historyRef.current, { role: "assistant", content: raw }];
+      setMessages(prev => [...prev, { role: "coach", id: Date.now(), parsed: parseCoachMessage(raw) }]);
+    } catch {}
+    setLoading(false);
+  }
+
+  function handleQuizAnswer(msgId, letterIndex, correctLetter) {
+    if (quizStates[msgId] || loading) return;
+    const chosen = String.fromCharCode(65 + letterIndex);
+    const correct = chosen === correctLetter;
+    setQuizStates(prev => ({ ...prev, [msgId]: { chosen, correct } }));
+    if (correct) setScore(s => s + 10);
+    setTimeout(() => continueAfterQuiz(correct ? `Correct — ${chosen}` : `I answered ${chosen}`), 600);
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (usage.videos >= limits.videosMonthly) {
+      setPaywall("video");
+      e.target.value = "";
+      return;
+    }
+    setPendingVideo(file);
+    e.target.value = "";
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  function upgradeToProSim() {
+    alert("Stripe checkout would open here.\n\nFor demo: Setting you to Pro tier.");
+    setTier("pro");
+    setPaywall(null);
+  }
+
+  if (screen === "landing") {
+    return (
+      <>
+        <style>{STYLES}</style>
+        <Landing onStart={() => setScreen("chat")} />
+      </>
+    );
+  }
+
+  const messagesLeft = Math.max(0, limits.daily - usage.messages);
+  const usageWarn = messagesLeft <= 3 && messagesLeft > 0;
+
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div className="app">
+        <div className="header">
+          <div className="header-left">
+            <button className="back-arrow" onClick={() => setScreen("landing")}>←</button>
+            <div>
+              <div className="logo">Corner<span>AI</span></div>
+              <div className="logo-sub">Fight IQ Coach</div>
+            </div>
+          </div>
+          <div className="header-right">
+            {tier !== "free" && <div className="tier-badge">{tier.toUpperCase()}</div>}
+            <div className={`usage-pill ${usageWarn ? "warn" : ""}`}>
+              {messagesLeft} LEFT
+            </div>
+            {score > 0 && (
+              <div className="score-badge">
+                <div className="score-num">{score}</div>
+                <div className="score-label">IQ</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {messages.length === 0 ? (
+          <div className="welcome">
+            <div className="welcome-icon">🥊</div>
+            <div className="welcome-title">Fight <span>IQ</span></div>
+            <div className="welcome-sub">Ask anything. Or upload a sparring video. You'll get quizzed — no skipping.</div>
+            <div className="starter-grid">
+              {STARTERS.map((s, i) => (
+                <button key={i} className="starter-btn" onClick={() => sendMessage(s.text)}>
+                  <span className="starter-emoji">{s.emoji}</span>
+                  {s.text}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="messages">
+            {messages.map((msg) => (
+              <div key={msg.id} className={`msg ${msg.role}`}>
+                <div className="msg-label">{msg.role === "user" ? "You" : "Coach"}</div>
+                {msg.role === "user" ? (
+                  <>
+                    <div className="msg-bubble">{msg.text}</div>
+                    {msg.video && <div className="video-attach">🎥 {msg.video}</div>}
+                  </>
+                ) : msg.parsed.type === "text" ? (
+                  <div className="msg-bubble">{msg.parsed.content}</div>
+                ) : (
+                  <>
+                    {msg.parsed.preamble && <div className="msg-bubble" style={{ marginBottom: 8 }}>{msg.parsed.preamble}</div>}
+                    <div className="quiz-card">
+                      <div className="quiz-tag">Quiz Time</div>
+                      <div className="quiz-q">{msg.parsed.question}</div>
+                      <div className="quiz-options">
+                        {msg.parsed.options.map((opt, i) => {
+                          const state = quizStates[msg.id];
+                          const isCorrect = opt.letter === msg.parsed.answer;
+                          const isChosen = state?.chosen === opt.letter;
+                          let cls = "quiz-opt";
+                          if (state) { if (isCorrect) cls += " correct"; else if (isChosen) cls += " wrong"; }
+                          return (
+                            <button key={i} className={cls} disabled={!!state || loading}
+                              onClick={() => handleQuizAnswer(msg.id, i, msg.parsed.answer)}>
+                              <span className="opt-letter">{opt.letter}</span>{opt.text}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {quizStates[msg.id] && (
+                        <div className={`quiz-feedback ${quizStates[msg.id].correct ? "correct" : "wrong"}`}>
+                          {quizStates[msg.id].correct ? "✓ " : "✗ "}{msg.parsed.explanation}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            {loading && (
+              <div className="msg coach">
+                <div className="msg-label">Coach</div>
+                <div className="typing">
+                  <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+
+        <div className="input-area">
+          {pendingVideo && (
+            <div className="pending-video">
+              <span>🎥 {pendingVideo.name}</span>
+              <button onClick={() => setPendingVideo(null)}>✕</button>
+            </div>
+          )}
+          <div className="input-wrap">
+            <input ref={fileInputRef} type="file" accept="video/*" style={{ display: "none" }} onChange={handleFileSelect} />
+            <button className="attach-btn" onClick={() => fileInputRef.current?.click()} title="Upload video">📎</button>
+            <textarea className="msg-input" placeholder={pendingVideo ? "Add a note about the video..." : "Ask your coach anything..."}
+              value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} rows={1} disabled={loading} />
+            <button className="send-btn" onClick={() => sendMessage()} disabled={(!input.trim() && !pendingVideo) || loading}>↑</button>
+          </div>
+          {error && <div className="error-msg">{error}</div>}
+          <div className="input-hint">
+            {messagesLeft}/{limits.daily} MESSAGES · {Math.max(0, limits.videosMonthly - usage.videos)}/{limits.videosMonthly} VIDEOS LEFT
+          </div>
+        </div>
+
+        {paywall && <PaywallModal reason={paywall} tier={tier} onClose={() => setPaywall(null)} onUpgrade={upgradeToProSim} />}
+      </div>
+    </>
+  );
+}
         // Find the last user message (should be the video one)
         const lastMsgIndex = finalHistory.length - 1;
         if (finalHistory[lastMsgIndex].role === "user") {
