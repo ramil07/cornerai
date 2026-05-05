@@ -11,10 +11,17 @@ const LIMITS = {
 const MODEL_CHAT = "claude-haiku-4-5-20251001";  // ~5x cheaper for chat + quizzes
 const MODEL_VIDEO = "claude-sonnet-4-20250514";  // Premium for video analysis
 
-const SYSTEM_PROMPT = `You are Coach — an elite boxing coach AI inside CornerAI. Your job is to teach boxing concepts AND make the fighter actually retain them.
+const SYSTEM_PROMPT = `You are Coach — an elite boxing coach AI inside CornerAI. Your job is to analyze boxing footage and teach fighters real, actionable feedback.
 
-RULES:
-1. Answer boxing questions clearly, directly, like a real coach texting a fighter. No fluff. No long paragraphs.
+RULES FOR VIDEO ANALYSIS:
+1. When frames are provided, analyze what you SEE: stance, foot position, hand placement, timing, defense, openings.
+2. Call out SPECIFIC moments: "Round 1, 0:30 — your chin came up when throwing the jab. Keep it tucked."
+3. Praise what works: "Your footwork angle was clean there — that's the distance control we talked about."
+4. Point out the ONE BIGGEST MISTAKE to work on next session.
+5. After feedback, drop a drill: "This week, throw 50 jabs in the mirror focusing only on chin position."
+
+RULES FOR CHAT:
+1. Answer boxing questions clearly, directly, like a real coach texting a fighter. No fluff.
 2. After teaching something meaningful, ALWAYS follow with a quiz. Don't ask permission. Just drop it.
 3. Quiz format (exactly this, on new lines):
 
@@ -29,9 +36,8 @@ EXPLANATION: [1 sentence why, coaching tone]
 
 4. Correct answer → acknowledge briefly, continue teaching OR ask what they want to learn next.
 5. Wrong answer → correct them, re-explain simply, quiz again on same concept. Don't move on.
-6. If they share a sparring/drill video, tie it to lessons you've discussed. Call out specific moments.
-7. Keep all messages under 4 sentences before a quiz.
-8. Never break character. You are Coach.`;
+6. Keep all messages under 4 sentences before a quiz.
+7. Never break character. You are Coach.`;
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
@@ -423,15 +429,98 @@ export default function CornerAIApp() {
 
   const limits = LIMITS[tier];
 
+  // Extract video frames as base64 images from file
+  async function extractVideoFrames(videoFile, maxFrames = 8) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const frames = [];
+      const url = URL.createObjectURL(videoFile);
+      
+      video.onloadedmetadata = () => {
+        canvas.width = 640;
+        canvas.height = 480;
+        const duration = video.duration;
+        const interval = duration / (maxFrames - 1);
+        let frameCount = 0;
+
+        const captureNextFrame = () => {
+          if (frameCount < maxFrames) {
+            video.currentTime = frameCount * interval;
+          }
+        };
+
+        video.onseeked = () => {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          frames.push(canvas.toDataURL("image/jpeg", 0.8));
+          frameCount++;
+          if (frameCount < maxFrames) {
+            captureNextFrame();
+          } else {
+            URL.revokeObjectURL(url);
+            resolve(frames);
+          }
+        };
+
+        captureNextFrame();
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Could not read video file"));
+      };
+
+      video.src = url;
+    });
+  }
+
   async function callCoach(history, useVideoModel = false) {
-    const response = await fetch("/.netlify/functions/chat", {
+    // If this is a video message, extract frames and rebuild the message with images
+    let finalHistory = history;
+    
+    if (useVideoModel && pendingVideo) {
+      try {
+        const frames = await extractVideoFrames(pendingVideo, 6);
+        
+        // Find the last user message (should be the video one)
+        const lastMsgIndex = finalHistory.length - 1;
+        if (finalHistory[lastMsgIndex].role === "user") {
+          const lastMsg = finalHistory[lastMsgIndex];
+          const textContent = typeof lastMsg.content === "string" 
+            ? lastMsg.content 
+            : lastMsg.content.find(c => c.type === "text")?.text || "Analyze this video";
+          
+          // Rebuild with image frames
+          finalHistory[lastMsgIndex] = {
+            role: "user",
+            content: [
+              { type: "text", text: textContent },
+              ...frames.map((frame, i) => ({
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/jpeg",
+                  data: frame.split(",")[1] // strip data:image/jpeg;base64, prefix
+                }
+              }))
+            ]
+          };
+        }
+      } catch (err) {
+        console.error("Frame extraction failed:", err);
+        // Fall back to text-only
+      }
+    }
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: useVideoModel ? MODEL_VIDEO : MODEL_CHAT,
-        max_tokens: 1000,
+        max_tokens: 1500,
         system: SYSTEM_PROMPT,
-        messages: history,
+        messages: finalHistory,
       }),
     });
     const data = await response.json();
