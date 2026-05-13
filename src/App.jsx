@@ -11,7 +11,7 @@ const LIMITS = {
 const MODEL_CHAT = "claude-haiku-4-5-20251001";  // ~5x cheaper for chat + quizzes
 const MODEL_VIDEO = "claude-sonnet-4-20250514";  // Premium for video analysis
 
-const SYSTEM_PROMPT = `You are Coach — an elite boxing coach AI inside CornerAI. Your job is to analyze boxing footage and teach fighters real, actionable feedback.
+const SYSTEM_PROMPT = `You are Coach — an elite combat sports coach AI inside CornerAI. Your job is to analyze training footage for various combat sports (including Boxing, MMA, Muay Thai, and Brazilian Jiu-Jitsu) and teach fighters real, actionable feedback.
 
 RULES FOR VIDEO ANALYSIS:
 1. When frames are provided, FIRST describe what you can clearly see: number of fighters, their gear colors (gloves, shorts, headgear), the setting (ring, gym, bag work).
@@ -23,14 +23,14 @@ RULES FOR VIDEO ANALYSIS:
 7. After confirmed analysis, drop a drill: "This week, work on [specific thing] for 50 reps daily."
 
 RULES FOR CHAT:
-1. Answer boxing questions clearly, directly, like a real coach texting a fighter. No fluff.
+1. Answer combat sports questions clearly, directly, like a real coach texting a fighter. No fluff.
 2. After teaching something meaningful, ALWAYS follow with a quiz. Don't ask permission. Just drop it.
 3. Quiz format (exactly this, on new lines):
 
 QUIZ:
 Q: [question]
 A) [option]
-B) [option]  
+B) [option]
 C) [option]
 D) [option]
 ANSWER: [letter]
@@ -227,10 +227,11 @@ function parseCoachMessage(text) {
 }
 
 const STARTERS = [
-  { emoji: "👁", text: "How do I read my opponent before they throw?" },
-  { emoji: "🛡", text: "My chin keeps coming up in sparring. Fix it." },
-  { emoji: "👟", text: "How do I use footwork to create angles?" },
   { emoji: "🥊", text: "How do I set up my right without telegraphing?" },
+ { emoji: "🥋", text: "Analyze my takedown defense in wrestling." },
+ { emoji: "🦵", text: "How can I improve my low kick technique in Muay Thai?" },
+ { emoji: "🤼", text: "Feedback on my guard retention during BJJ rolling." },
+ { emoji: "💥", text: "Where are the openings in my opponent's stance (MMA)?" },
 ];
 
 function Landing({ onStart }) {
@@ -433,7 +434,7 @@ export default function CornerAIApp() {
   const limits = LIMITS[tier];
 
   // Extract video frames as base64 images from file
-  async function extractVideoFrames(videoFile, maxFrames = 12) {
+  async function extractVideoFrames(videoFile, maxFrames = 24) {
     return new Promise((resolve, reject) => {
       const video = document.createElement("video");
       const canvas = document.createElement("canvas");
