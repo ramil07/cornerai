@@ -753,7 +753,7 @@ export default function CornerAIApp() {
             </div>
           )}
           <div className="input-wrap">
-            <input    ref={fileInputRef}    type="file"    accept="video/mp4,video/quicktime,video/x-m4v,video/*"    capture="environment"    multiple={false}   style={{ display: "none" }}    onChange={handleFileSelect}  />
+            <input    ref={fileInputRef}    type="file"    accept="video/mp4,video/quicktime,video/x-m4v,video/*"        multiple={false}   style={{ display: "none" }}    onChange={handleFileSelect}  />
             <button className="attach-btn" onClick={() => fileInputRef.current?.click()} title="Upload video">📎</button>
             <textarea className="msg-input" placeholder={pendingVideo ? "Add a note about the video..." : "Ask your coach anything..."}
               value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} rows={1} disabled={loading} />
