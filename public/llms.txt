@@ -1,0 +1,22 @@
+# CornerAI
+
+> CornerAI is an AI Fight IQ coach for combat sports athletes. It gives fighters chat coaching, retention quizzes, and video analysis for boxing, MMA, Muay Thai, and BJJ so that every lesson a coach teaches is actually retained between sessions.
+
+CornerAI exists to fix retention, not talent. Every lesson is followed by a quiz so it sticks, sparring footage gets frame-by-frame coaching feedback, and drills can be uploaded to verify a mistake was fixed.
+
+## Core
+- [Home](https://cornerai.io/): Product overview, features, and pricing.
+
+## Features
+- Coach Chat: ask anything and get real, direct coaching answers.
+- Retention Quizzes: every lesson is followed by a quiz so it is retained.
+- Video Analysis: upload sparring footage for frame-by-frame feedback.
+- Drill Verification: upload drills to prove a correction was made.
+
+## Pricing
+- Free: $0/month — 10 coach messages/day, 1 video analysis/month, basic quizzes.
+- Pro: $29/month founder's price (normally $49) — 100 messages/day, 15 video analyses/month, full retention tracking.
+- Gym: $297/month — for gym owners, up to 20 fighters, coach dashboard and analytics.
+
+## Contact
+- [Contact Sales](https://cornerai.io/): for gym and team plans.
