@@ -43,13 +43,13 @@ EXPLANATION: [1 sentence why, coaching tone]
 8. NEVER lie or hallucinate. If you don't know, say so.`;
 
 const STYLES = `
- @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+ 
  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
  :root {
  --bg: #080808; --card: #161616; --border: #222; --border-light: #2a2a2a;
  --red: #e63946; --red-dim: rgba(230,57,70,0.08); --red-glow: rgba(230,57,70,0.3);
  --gold: #f4b942; --green: #00d68f;
- --white: #f2f2f2; --gray: #555; --gray-light: #888;
+ --white: #f2f2f2; --gray: #8a8a8a; --gray-light: #b3b3b3;
  --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif; --display: 'Bebas Neue', sans-serif;
  }
  html, body { height: 100%; background: var(--bg); color: var(--white); font-family: var(--sans); }
