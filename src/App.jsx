@@ -255,6 +255,9 @@ function Landing({ onStart }) {
         <div style={{ marginTop: 20, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--gold)', letterSpacing: 2 }}>
           🔥 FOUNDER'S DEAL: $29/MO LOCKED FOR LIFE · {100 - 7} SPOTS LEFT
         </div>
+        <div style={{ marginTop: 12, fontSize: 13, color: "var(--gray-light)", maxWidth: 520, margin: "12px auto 0" }}>
+          ✅ 30-day guarantee — train with it for a month. If your coach doesn't notice the difference, we refund you.
+        </div>
       </div>
 
       <div className="problem-section">
@@ -290,7 +293,7 @@ function Landing({ onStart }) {
 
       <div className="pricing">
         <h2 className="section-title">Pricing</h2>
-        <p className="section-sub">Start free. Upgrade when you're serious.</p>
+        <p className="section-sub">Start free. Private coaching runs $60–100 a session — CornerAI is less than one session a month.</p>
         <div className="tiers">
           <div className="tier">
             <div className="tier-name">Free</div>
@@ -310,6 +313,7 @@ function Landing({ onStart }) {
             <div className="tier-price-wrap">
               <div className="tier-price-old">$49</div>
               <div className="tier-price">$29<span> /month</span></div>
+              <div style={{ fontSize: 12, color: "var(--gray-light)", marginTop: 6 }}>or <strong style={{ color: "var(--white)" }}>$290/year</strong> — 2 months free</div>
             </div>
             <div className="tier-tagline">Locked in forever · For serious fighters</div>
             <ul className="tier-features">
@@ -336,6 +340,10 @@ function Landing({ onStart }) {
             </ul>
             <button className="tier-btn ghost" onClick={() => alert("Contact: ryan@cornerai.io")}>Contact Sales</button>
           </div>
+        </div>
+        <div style={{ marginTop: 28, textAlign: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 24px", maxWidth: 620, margin: "28px auto 0" }}>
+          <div style={{ fontFamily: "var(--display)", fontSize: 22, letterSpacing: 1, marginBottom: 6 }}>🛡️ The Corner Guarantee</div>
+          <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--gray-light)" }}>Use CornerAI for 30 days. If you're not sharper — and your coach doesn't notice — email us for a full refund. That's how sure we are it sticks.</div>
         </div>
       </div>
     </div>
@@ -410,6 +418,8 @@ export default function CornerAIApp() {
     lastMonthlyReset: new Date().toISOString().slice(0, 7),
   });
 
+  const [leadDone, setLeadDone] = useState(false);
+  const [leadEmail, setLeadEmail] = useState("");
   const messagesEndRef = useRef(null);
   const historyRef = useRef([]);
   const fileInputRef = useRef(null);
@@ -738,6 +748,19 @@ export default function CornerAIApp() {
                 <div className="msg-label">Coach</div>
                 <div className="typing">
                   <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+                </div>
+              </div>
+            )}
+            {messages.some((m) => m.role === "coach" && m.parsed) && !leadDone && (
+              <div style={{ alignSelf: "stretch", background: "var(--card)", border: "1px solid var(--red)", borderRadius: 12, padding: "16px 18px", margin: "4px 0" }}>
+                <div style={{ position: "relative" }}>
+                  <button onClick={() => setLeadDone(true)} style={{ position: "absolute", top: -6, right: -2, background: "transparent", border: "none", color: "var(--gray)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
+                  <div style={{ fontFamily: "var(--display)", fontSize: 20, letterSpacing: 1, marginBottom: 4 }}>Want your progress saved?</div>
+                  <div style={{ fontSize: 13, color: "var(--gray-light)", lineHeight: 1.5, marginBottom: 12 }}>Drop your email — we'll save your streak and send you 3 fight-IQ drills this week. No spam.</div>
+                  <form onSubmit={(e) => { e.preventDefault(); const em = leadEmail.trim(); if (!em.includes("@") || !em.includes(".")) return; fetch("/.netlify/functions/lead", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: em, source: "chat-quiz" }) }).catch(() => {}); setLeadDone(true); }} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <input type="email" required value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} placeholder="your@email.com" style={{ flex: 1, minWidth: 180, background: "var(--bg)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "10px 12px", color: "var(--white)", fontFamily: "var(--sans)", fontSize: 14 }} />
+                    <button type="submit" style={{ background: "var(--red)", color: "white", border: "none", borderRadius: 8, padding: "10px 18px", fontFamily: "var(--sans)", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Save my progress</button>
+                  </form>
                 </div>
               </div>
             )}
